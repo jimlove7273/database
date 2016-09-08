@@ -13,10 +13,16 @@ class DB extends \PDO
     const FETCH_FROM_NEXT_ROW = 0;
     const FETCH_FROM_LAST_ROW = 1;
 
-
     const INSERT = "INSERT INTO";
     const UPDATE = "UPDATE";
     const REPLACE = "REPLACE";
+
+    private static $config = array();
+
+    /**
+     * @var DB[]
+     */
+    private static $instances = array();
 
     /**
      * Previous prepared statements
@@ -47,26 +53,73 @@ class DB extends \PDO
     public $fetch_table_names = 0;
 
     /**
+     * @var \Closure
+     */
+    private static $exception_callback;
+
+    /**
+     * @param string $instance
+     * @return DB
+     * @throws \Exception
+     */
+    static function getInstance($instance = 'default')
+    {
+        if(!array_key_exists($instance, self::$instances)) {
+            // check if configuration exists
+            if(!array_key_exists($instance, self::$config)) {
+                throw new \Exception("Configuration is not set. Use DB::setConfig(options, [instance]) to set");
+            }
+
+            self::$instances[$instance] = new self(
+                self::$config[$instance]["dsn"],
+                self::$config[$instance]["username"],
+                self::$config[$instance]["password"],
+                self::$config[$instance]["options"]
+            );
+        }
+
+        return self::$instances[$instance];
+    }
+
+    /**
+     * Set database config params
+     * config param should contains dsn, username, password and options
+     * 
+     * @param array $config
+     * @param string $instance
+     */
+    static function setConfig($config, $instance = 'default')
+    {
+        self::$config[$instance]['dsn'] = array_key_exists('dsn', $config) ? $config['dsn'] : "";
+        self::$config[$instance]['username'] = array_key_exists('username', $config) ? $config['username'] : null;
+        self::$config[$instance]['password'] = array_key_exists('password', $config) ? $config['password'] : null;
+        self::$config[$instance]['options'] = array_key_exists('options', $config) ? $config['options'] : array();
+    }
+
+    /**
+     * @throws \PDOException|\Exception
      * @param string $dsn
-     * @param null|string $username
-     * @param null|string $password
+     * @param null $username
+     * @param null $password
      * @param array $options
      */
     function __construct($dsn, $username = null, $password = null, $options = array())
     {
-
         // Default options
         $options = $options + array(
             \PDO::ATTR_STATEMENT_CLASS => array("database\\Statement", array($this)),
-            \PDO::MYSQL_ATTR_INIT_COMMAND => "SET NAMES UTF8",
             \PDO::ATTR_ERRMODE => \PDO::ERRMODE_EXCEPTION,
-            \PDO::ATTR_EMULATE_PREPARES => false
         );
 
         try {
-            parent::__construct($dsn, $username, $password, $options);
-        } catch (\PDOException $e) {
-            exit('Database connection error');
+            // We're using @ because PDO produces Warning before PDOException.
+            @parent::__construct($dsn, $username, $password, $options);
+        } catch (\Exception $e) {
+            if(null !== self::$exception_callback && is_callable(self::$exception_callback)) {
+                call_user_func_array(self::$exception_callback, array($e));
+            } else {
+                throw $e;
+            }
         }
     }
 
@@ -268,17 +321,24 @@ class DB extends \PDO
         return $stmt->fetchColumn();
     }
 
+    /**
+     * @deprecated since version 1.0
+     */
+    function executeQuery($sql, $params = null)
+    {
+        return $this->execQueryString($sql, $params);
+    }
 
     /**
      * Prepare & execute query with params
      *
      * @throw PDOException
      *
-     * @param $sql
-     * @param null $params
+     * @param string $sql
+     * @param array|null $params
      * @return Statement
      */
-    function executeQuery($sql, $params = null)
+    function execQueryString($sql, $params = null)
     {
         if (!is_array($params) && !is_null($params)) {
             $params = array($params);
@@ -287,6 +347,15 @@ class DB extends \PDO
         $stmt = $this->prepare($sql);
         $stmt->execute($params);
         return $stmt;
+    }
+
+    /**
+     * @param Query $query
+     * @return Statement
+     */
+    public function execQuery(Query $query)
+    {
+        return $this->execQueryString($query->getQuery(), $query->getParams());
     }
 
     /**
@@ -319,7 +388,6 @@ class DB extends \PDO
      */
     function createQuery()
     {
-        include_once 'Query.php';
         return new Query($this);
     }
 
@@ -331,7 +399,7 @@ class DB extends \PDO
      */
     function select($statement = "")
     {
-        return self::createQuery()->select($statement);
+        return $this->createQuery()->select($statement);
     }
 
     /**
@@ -381,5 +449,15 @@ class DB extends \PDO
     {
         $this->setAttribute(self::ATTR_FETCH_TABLE_NAMES, $option);
         $this->fetch_table_names = $option;
+    }
+
+    /**
+     * Register exception callback
+     * If connection to server fails, exception will be passed to callback as first param
+     * @param \Closure $callback
+     */
+    public static function registerExceptionCallback($callback)
+    {
+        self::$exception_callback = $callback;
     }
 }

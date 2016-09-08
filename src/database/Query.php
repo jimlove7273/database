@@ -29,9 +29,9 @@ class Query
     /**
      * Database SQL Builder
      *
-     * @param DB $db
+     * @param DB|null $db
      */
-    public function __construct(DB $db)
+    public function __construct(DB $db = null)
     {
         $this->db = $db;
     }
@@ -115,6 +115,7 @@ class Query
     public function whereNotIn($column, $params)
     {
         $this->prepareWhereInStatement($column, $params, true);
+        $this->addParams($params);
 
         return $this;
     }
@@ -247,7 +248,10 @@ class Query
      */
     public function execute()
     {
-        return $this->db->executeQuery($this->getQuery(), $this->params);
+        if($this->db === null) {
+            $this->db = DB::getInstance();
+        }
+        return $this->db->execQuery($this);
     }
 
     /**
@@ -290,6 +294,14 @@ class Query
         }
 
         $this->params = array_merge($this->params, $params);
+    }
+
+    /**
+     * @return array
+     */
+    public function getParams()
+    {
+        return $this->params;
     }
 
     /**

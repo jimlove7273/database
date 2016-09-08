@@ -1,7 +1,7 @@
-PHP/MySQL Database wrapper
+PDO wrapper with query builder
 ==========================
 
-MySQL datadabase wrapper for PHP extends PDO and PDOStatement classes and add some nice functionality.
+PDO wrapper extends PDO and PDOStatement classes and add some nice methods as insert/update/delete and so on. Also, there is very useful SQL query builder.
 
 API
 ---
@@ -43,10 +43,7 @@ Usage examples
 -----------------
 
 ### Creating database instance
-    require "database.php";
     $db = new database\DB("mysql:host=localhost;dbname=YOUR_DB_NAME", "YOUR_DB_USERNAME", "YOUR_DB_PASSWORD");
-
-If you're using your own autoloader, you may not need to include database.php script, just note that this library use `database` namespace.
 
 ### Select
 Execute query and fetch **User** object:
@@ -157,4 +154,4 @@ Automatic determination of INSERT or UPDATE. If $data['user_id'] exits it will b
 	/* @var User[] $users Collection of User objects */
 	$users = $db->executeQuery("SELECT * FROM users")->fetchCollection(new User);
 
-[See more examples for Sakila database](https://github.com/salebab/database/tree/master/sakila-examples)
+[See more examples for Sakila database](https://github.com/salebab/database/tree/master/examples/sakila)
